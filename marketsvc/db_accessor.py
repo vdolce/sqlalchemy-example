@@ -12,20 +12,20 @@ DB_CONFIG = {
 }
 
 
+from db.base import engine
+from sqlalchemy import text
+
 def execute_query(query, params=None):
-    with psycopg2.connect(**DB_CONFIG) as conn:
-        cur = conn.cursor()
-        cur.execute(query, params)
-        rows = cur.fetchall()
-        return rows
+    with engine.connect() as conn:
+        return conn.execute(text(query), params)
 
 
 def execute_insert_query(query, params=None):
-    with psycopg2.connect(**DB_CONFIG) as conn:
-        cur = conn.cursor()
-        cur.execute(query, params)
+    with engine.connect() as conn:
+        result = conn.execute(text(query), params)
         conn.commit()
-        return cur.fetchone()
+        return result
+
 
 
 def execute_insert_queries(query, params_tuple=None):
@@ -113,31 +113,36 @@ def get_orders_between_dates(after, before):
 
 def add_new_order_for_customer(customer_id, items):
     try:
-        new_order_id = execute_insert_query(
+        result = execute_insert_query(
             """
             INSERT INTO orders
                 (customer_id, order_time)
             VALUES
-                (%(customer_id)s, NOW())
+                (:customer_id, NOW())
             RETURNING id
             """,
             {"customer_id": customer_id},
-        )[0]
+        )
+        new_order_id = result.one().id
 
         (
-            execute_insert_queries(
+            execute_insert_query(
                 """
             INSERT INTO order_items
                 (order_id, item_id, quantity)
-            VALUES (%s, %s, %s)
+            VALUES
+                (:order_id, :item_id, :quantity)
             """,
-                (
-                    (new_order_id, item["id"], item["quantity"])
+                [
+                    {
+                        "order_id": new_order_id,
+                        "item_id": item["id"],
+                        "quantity": item["quantity"],
+                    }
                     for item in items
-                ),
+                ],
             )
         )
-
         return True
 
     except Exception:

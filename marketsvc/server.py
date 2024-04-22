@@ -19,7 +19,9 @@ def hello():
 
 @app.route("/api/customers")
 def customers():
-    return jsonify(get_customers())
+    customers = get_customers()
+    response = [customer._asdict() for customer in customers]
+    return jsonify(response)
 
 
 @app.route("/api/orders")
